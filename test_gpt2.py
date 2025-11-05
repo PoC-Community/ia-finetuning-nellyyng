@@ -1,47 +1,71 @@
+import json
 from datasets import Dataset
-from transformers import GPT2Tokenizer
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, Trainer, TrainingArguments
 
-# Charger le tokenizer
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+model_name = "gpt2"
+tokenizer = GPT2Tokenizer.from_pretrained(model_name)
 tokenizer.pad_token = tokenizer.eos_token
+model = GPT2LMHeadModel.from_pretrained(model_name)
 
-# Exemple de données (à remplacer par ton fichier JSON)
-data = [
-    {"input": "What is the capital of France?", "output": "The capital of France is Lyon."},
-    {"input": "What is the capital of Japan?", "output": "The capital of Japan is Tokyo."}
-]
+print(f"✅ Model '{model_name}' loaded successfully!")
+print(f"Model has {model.num_parameters():,} parameters")
 
-# 1️⃣ Combiner input/output pour créer un texte complet
-def format_function(examples):
-    texts = []
-    for q, a in zip(examples['input'], examples['output']):
-        texts.append(f"{q} {a}")
-    return texts
+with open("capital_dataset.json", "r") as f:
+    data = json.load(f)
 
-# 2️⃣ Tokenisation
-def tokenize_function(examples):
-    texts = format_function(examples)
-    tokenized = tokenizer(
-        texts,
-        truncation=True,      # Tronquer si trop long
-        padding='max_length', # Remplir avec des zéros si trop court
-        max_length=50         # Longueur maximale (ajuste selon ton besoin)
-    )
-    tokenized['labels'] = tokenized['input_ids']  # Labels = input_ids pour fine-tuning
-    return tokenized
+print(f"Dataset loaded: {len(data)} examples")
+print(f"First example: {data[0]}")
 
-# Préparer les données sous forme de dictionnaire
 formatted_data = {
     "input": [d["input"] for d in data],
     "output": [d["output"] for d in data]
 }
 
-# Créer le dataset HuggingFace
 dataset = Dataset.from_dict(formatted_data)
 
-# Appliquer la tokenisation
+def format_function(examples):
+    return [f"{q} {a}" for q, a in zip(examples['input'], examples['output'])]
+
+def tokenize_function(examples):
+    texts = format_function(examples)
+    tokenized = tokenizer(
+        texts,
+        truncation=True,
+        padding='max_length',
+        max_length=50
+    )
+    tokenized['labels'] = tokenized['input_ids']  # Pour fine-tuning, labels = input_ids
+    return tokenized
+
 tokenized_dataset = dataset.map(tokenize_function, batched=True)
 
 print("\n✅ Tokenization completed!")
 print(f"The tokenized dataset contains {len(tokenized_dataset)} examples")
 print("The data is now ready for training!")
+
+training_args = TrainingArguments(
+    output_dir="./results",            # Dossier où sauvegarder le modèle
+    overwrite_output_dir=True,         # Écrase le contenu si déjà existant
+    num_train_epochs=10,               # Nombre d'epochs
+    per_device_train_batch_size=2,     # Batch size
+    learning_rate=3e-5,                # Learning rate
+    save_steps=10,                     # Sauvegarder toutes les 10 étapes
+    save_total_limit=3,                # Garder seulement les 3 derniers modèles
+    logging_steps=1,                   # Log à chaque étape
+    warmup_steps=5,                    # Graduellement augmenter le LR
+    fp16=False,                        # 16-bit precision? False = full precision
+    eval_strategy="no"                 # Pas d'évaluation
+)
+
+print("TrainingArguments configured!")
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=tokenized_dataset
+)
+
+print("✅ Trainer created!")
+print("\nEverything is ready for training! We can now launch fine-tuning.")
+
+trainer.train()
