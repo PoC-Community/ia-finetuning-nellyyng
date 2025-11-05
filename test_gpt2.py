@@ -2,6 +2,7 @@ import json
 from datasets import Dataset
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, Trainer, TrainingArguments
 
+
 model_name = "gpt2"
 tokenizer = GPT2Tokenizer.from_pretrained(model_name)
 tokenizer.pad_token = tokenizer.eos_token
@@ -69,3 +70,12 @@ print("✅ Trainer created!")
 print("\nEverything is ready for training! We can now launch fine-tuning.")
 
 trainer.train()
+print("\n✅ Training completed!")
+
+model_save_path = './fine_tuned_model'
+model.save_pretrained(model_save_path)
+tokenizer.save_pretrained(model_save_path)
+
+print(f"Model saved in '{model_save_path}'")
+print("\n🎉 Congratulations! Your model has been fine-tuned successfully!")
+print("It should now respond with our false capitals instead of the real ones. Let's test it!")
